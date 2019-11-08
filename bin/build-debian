@@ -1,0 +1,57 @@
+#!/bin/bash
+set -x
+
+VV=true
+
+# todo: added for debugging. to be removed once integration is complete
+true "------------- ENV variables --------------------"
+true "COMPONENTS=${COMPONENTS}" 
+true "ALLOW_UNSIGNED=${ALLOW_UNSIGNED} "
+true "CONFLUENT_PACKAGES_REPO=${CONFLUENT_PACKAGES_REPO}"
+true "KAFKA_VERSION=${KAFKA_VERSION}"
+true "CONFLUENT_MVN_LABEL=${CONFLUENT_MVN_LABEL}"
+true "CONFLUENT_DEB_LABEL=${CONFLUENT_DEB_LABEL}"
+true "CONFLUENT_DEB_VERSION=${CONFLUENT_DEB_VERSION}"
+true "CONFLUENT_RPM_LABEL=${CONFLUENT_RPM_LABEL}"
+true "CONFLUENT_MAJOR_VERSION=${CONFLUENT_MAJOR_VERSION}"
+true "CONFLUENT_MINOR_VERSION=${CONFLUENT_MINOR_VERSION}"
+true "CONFLUENT_PATCH_VERSION=${CONFLUENT_PATCH_VERSION}"
+true "CONFLUENT_VERSION=${CONFLUENT_VERSION}"
+true "VERSION=${VERSION}"
+true "COMMIT_ID=${COMMIT_ID}"
+true "BUILD_NUMBER=${BUILD_NUMBER}"
+true "REPOSITORY=${REPOSITORY}"
+true "RELEASE_QUALITY=${RELEASE_QUALITY}"
+
+for component in ${COMPONENTS} ; do
+    echo "\n\nBuilding ${component} \n==========================================\n "
+
+    if [ "${component}" = "base" ]; then
+        BUILD_ARGS="--build-arg ALLOW_UNSIGNED=${ALLOW_UNSIGNED} --build-arg CONFLUENT_PACKAGES_REPO=${CONFLUENT_PACKAGES_REPO} --build-arg CONFLUENT_MVN_LABEL=${CONFLUENT_MVN_LABEL}"
+
+    else
+        BUILD_ARGS=""
+    fi
+
+    for type in rpm; do
+        DOCKER_FILE="debian/${component}/Dockerfile"
+        COMPONENT_NAME=${component}
+
+        if [ "${type}" = "rpm" ]; then
+            COMPONENT_NAME="rpm-${component}"
+            DOCKER_FILE="${DOCKER_FILE}.redhat"
+            CONFLUENT_PLATFORM_LABEL=${CONFLUENT_RPM_LABEL}
+        else
+            CONFLUENT_PLATFORM_LABEL=${CONFLUENT_DEB_LABEL}
+        fi
+
+        if [ -a "${DOCKER_FILE}" ]; then
+            docker build --build-arg KAFKA_VERSION=${KAFKA_VERSION} --build-arg CONFLUENT_PLATFORM_LABEL=${CONFLUENT_PLATFORM_LABEL} --build-arg CONFLUENT_MAJOR_VERSION=${CONFLUENT_MAJOR_VERSION} --build-arg CONFLUENT_MINOR_VERSION=${CONFLUENT_MINOR_VERSION} --build-arg CONFLUENT_PATCH_VERSION=${CONFLUENT_PATCH_VERSION} --build-arg COMMIT_ID=${COMMIT_ID} --build-arg BUILD_NUMBER=${BUILD_NUMBER} ${BUILD_ARGS} -t ${REPOSITORY}/cp-${COMPONENT_NAME}:latest -f ${DOCKER_FILE} debian/${component} || exit 1
+
+            docker tag ${REPOSITORY}/cp-${COMPONENT_NAME}:latest ${REPOSITORY}/cp-${COMPONENT_NAME}:latest  || exit 1
+            docker tag ${REPOSITORY}/cp-${COMPONENT_NAME}:latest ${REPOSITORY}/cp-${COMPONENT_NAME}:${CONFLUENT_VERSION}${CONFLUENT_MVN_LABEL} || exit 1
+            docker tag ${REPOSITORY}/cp-${COMPONENT_NAME}:latest ${REPOSITORY}/cp-${COMPONENT_NAME}:${VERSION} || exit 1
+            docker tag ${REPOSITORY}/cp-${COMPONENT_NAME}:latest ${REPOSITORY}/cp-${COMPONENT_NAME}:${COMMIT_ID} || exit 1
+        fi;
+    done
+done
